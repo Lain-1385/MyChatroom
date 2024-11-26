@@ -52,7 +52,7 @@ void ChatServer::onMessage(const TcpConnectionPtr &conn,
  
     //testing, print the message received
     cout << buf << endl;
- 
+    
     //data deserialization
     json js = json::parse(buf);
     //

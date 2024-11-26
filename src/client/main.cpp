@@ -106,9 +106,17 @@ int main(int argc, char **argv) // argc: number of parameters, argv: parameter l
         cout << "========================" << endl;
         cout << "Please input your choice:";
         int choice = 0;
-        cin >> choice; // read function option
-        cin.get();     // read the remaining newline character in the buffer
- 
+        if (cin >> choice) // read function option
+        {
+            cin.get(); // read the remaining newline character in the buffer
+        }
+        else
+        {
+            cerr << "invalid input!" << endl;
+            cin.clear(); // clear error state
+            cin.ignore(numeric_limits<streamsize>::max(), '\n'); // ignore the remaining characters in the buffer
+            continue;
+        }
         switch (choice)
         {
         case 1: // login business 
@@ -473,7 +481,7 @@ void chat(int clientfd, string str)
     js["msgid"] = ONE_CHAT_MSG;
     js["id"] = g_currentUser.getId();
     js["name"] = g_currentUser.getName();
-    js["toid"] = friendid;
+    js["to"] = friendid;
     js["msg"] = message;
     js["time"] = getCurrentTime();
  

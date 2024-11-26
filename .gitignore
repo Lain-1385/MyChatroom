@@ -3,3 +3,4 @@ build/
 thirdparty/
 temp.sql
 test.txt
+.vscode/
