@@ -14,6 +14,7 @@ using namespace muduo::net;
 #include "json.hpp"
 #include "friendmodel.hpp"
 #include "offlinemessagemodel.hpp"
+#include "redis.hpp"
 
 using json = nlohmann::json;
  
@@ -54,6 +55,8 @@ public:
 
     //get corresponding Handle for message
     MsgHandler getHandler(int msgid);
+
+    void handleRedisSubsribleMessage(int userid, string msg);
 private:
     // private constructor, using singleton model
     ChatService();
@@ -72,6 +75,9 @@ private:
     offlineMsgModel _offlineMsgModel;
     FriendModel _friendModel;
     GroupModel _groupModel;
+
+    //redis object
+    Redis _redis;
 
 };
  

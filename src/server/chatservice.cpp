@@ -28,6 +28,11 @@ ChatService::ChatService()
     _msgHandlerMap.insert({ADD_GROUP_MSG, std::bind(&ChatService::addGroup, this, _1, _2, _3)});
     _msgHandlerMap.insert({GROUP_CHAT_MSG, std::bind(&ChatService::groupChat, this, _1, _2, _3)});
     _msgHandlerMap.insert({LOGOUT_MSG, std::bind(&ChatService::clientCloseException, this, _1)});
+
+    if(_redis.connect())
+    {
+        _redis.init_notify_handler(std::bind(&ChatService::handleRedisSubsribleMessage, this, _1, _2));
+    }
 }
  
  
@@ -74,7 +79,10 @@ void ChatService::login(const TcpConnectionPtr &conn, json &js, Timestamp time)
                 lock_guard<mutex> lock(_connMutex);
                 _userConnMap.insert(make_pair(id, conn));
             }
- 
+
+            //redis channel equals id, every online user has a unique redis channel
+            _redis.subscribe(id);
+            
             // login successfully, update the user state
             user.setState("online");
             _userModel.updateState(user);
@@ -196,6 +204,7 @@ void ChatService::clientCloseException(const TcpConnectionPtr &conn)
             }
         }
     }
+    _redis.unsubscribe(user.getId());
     // update the user state information
     if (user.getId() != -1)
     {
@@ -213,14 +222,24 @@ void ChatService::oneChat(const TcpConnectionPtr &conn, json &js, Timestamp time
         auto it = _userConnMap.find(to_id);
         if (it != _userConnMap.end())
         {
-            // if the target user is online, send the message directly
+            // if the target user is online on same server, send the message directly
             it->second->send(js.dump());
             return;
         }
     }
+
+    User user = _userModel.query(to_id);
+    if(user.getState() == "online")
+    {
+        // if the target user is online on other server, send the message directly
+        _redis.publish(to_id, js.dump());
+        return;
+    }
     // if the target user is offline, store the message in the offline message table
     _offlineMsgModel.insert(to_id, js.dump());
 }
+
+
 
 // reset user information when exception occurs
 void ChatService::reset()
@@ -336,15 +355,38 @@ void ChatService::groupChat(const TcpConnectionPtr &conn, json &js, Timestamp ti
     for (int id : useridVec)
     {
         auto it = _userConnMap.find(id);
-        if (it != _userConnMap.end()) // if use is online
+        if (it != _userConnMap.end()) // if use is online on the same server
         {
             // send group message
             it->second->send(js.dump());
         }
-        else // offline
+        else 
         {
-            // store offline message
-            _offlineMsgModel.insert(id, js.dump());
+            User user = _userModel.query(id);
+            if (user.getState() == "online" ) // if user is online on other server
+            {
+                // send group message
+                _redis.publish(id, js.dump());
+            }
+            else
+            {
+                // store the message in the offline message table
+                _offlineMsgModel.insert(id, js.dump());
+            }
         }
     }
 }   
+
+
+//get message from subscribed channel
+void ChatService::handleRedisSubsribleMessage(int userid, string msg)
+{
+    lock_guard<mutex> lock(_connMutex);
+    auto it = _userConnMap.find(userid);
+    if (it != _userConnMap.end())
+    {
+        it->second->send(msg);
+        return;
+    }
+    _offlineMsgModel.insert(userid, msg);
+}
